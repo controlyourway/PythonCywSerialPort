@@ -1,4 +1,4 @@
-import serial, time, getopt, sys
+import serial, time, getopt, sys, signal
 from threading import Thread
 import ControlYourWay_v1_p27
 
@@ -39,7 +39,7 @@ class SerialPort:
 
     def open_serial_port(self):
         self._serial = serial.Serial(port=self._port, baudrate=self._baudrate, parity=self._parity,
-                                     stopbits=self._stop_bits, bytesize=self._number_of_bits, timeout=0)
+                                     stopbits=self._stop_bits, bytesize=self._number_of_bits, timeout=0.25)
         # Create thread
         self._running = True
         self._thread = Thread(target=self._update)
@@ -55,7 +55,6 @@ class SerialPort:
             if c:
                 if self._rx_callback:
                     self._rx_callback(c)
-            time.sleep(0.0001)
         return False
 
     def send_data(self, data):
@@ -81,12 +80,17 @@ class ControlYourWay:
         self._thread.start()
         self._serial_port = serial_port
         self._serial_port.set_rx_callback(self.data_received)
-        keyboard_input = ''
-        while keyboard_input != "quit":
-            keyboard_input = raw_input("Enter 'quit' to close program: ")
+        print("Press Ctrl+C to quit")
+        signal.signal(signal.SIGINT, self.signal_handler)
+        while self._running:
+            time.sleep(0.1)
+
+    def signal_handler(self, signal, frame):
         self._cyw.close_connection(True)
         self._running = False
         self._serial_port.close_serial_port()
+        print('Program stopped')
+        sys.exit(0)
 
     def _collect_data(self):
         while self._running:
