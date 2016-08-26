@@ -65,7 +65,7 @@ class SerialPort:
 
 
 class ControlYourWay:
-    def __init__(self, cyw_username, cyw_password, serial_port, cyw_network_names=['network 1']):
+    def __init__(self, cyw_username, cyw_password, serial_port, encryption, cyw_network_names=['network 1']):
         self._cyw = ControlYourWay_v1_p27.CywInterface()
         self._cyw.set_user_name(cyw_username)
         self._cyw.set_network_password(cyw_password)
@@ -73,6 +73,8 @@ class ControlYourWay:
         self._cyw.set_connection_status_callback(self.connection_status_callback)
         self._cyw.set_data_received_callback(self.data_received_callback)
         self._cyw.name = 'Python Serial Interface'
+        if encryption:
+            self._cyw.set_use_encryption(True)
         self._send_data_collected = ""
         self._cyw.start()
         self._running = True
@@ -116,15 +118,16 @@ class ControlYourWay:
         self._send_data_collected += c
 
 def print_help():
-    print ('PythonCywSerialPort.py -u <username> -p <password> -s <serialport>\n')
-    print ('For example:\n')
-    print ('PythonCywSerialPort.py -u test@controlyourway.com -p 123456789 -s "COM1"\n')
-    print ('Please register on www.controlyourway.com if you don\'t have these details\n')
-    print ('Optional parameters:\n')
-    print ('-r <parity> (E for even, O for odd)\n')
-    print ('-b <baudrate>\n')
-    print ('-n <number of bits> (7 or 8)\n')
-    print ('-t <stop bits> (1 or 2)\n')
+    print('PythonCywSerialPort.py -u <username> -p <password> -s <serialport>\n')
+    print('For example:\n')
+    print('PythonCywSerialPort.py -u test@controlyourway.com -p 123456789 -s "COM1"\n')
+    print('Please register on www.controlyourway.com if you don\'t have these details\n')
+    print('Optional parameters:\n')
+    print('-r <parity> (E for even, O for odd), default None\n')
+    print('-b <baudrate>, default 115200\n')
+    print('-n <number of bits> (7 or 8), default 8\n')
+    print('-t <stop bits> (1 or 2), default 1\n')
+    print('-e <encryption> (0 or 1)default 0\n')
 
 if __name__ == "__main__":
     param_cyw_username = ''
@@ -134,10 +137,11 @@ if __name__ == "__main__":
     param_baudrate=''
     param_number_of_bits = ''
     param_stop_bits = ''
+    param_encryption = False
     argv = sys.argv[1:]
     try:
-        opts, args = getopt.getopt(argv,"hu:p:s:r:b:n:t:",["username=","password=","serport=","parity=",
-                                                         "baudrate=","numbits=","stopbits="])
+        opts, args = getopt.getopt(argv,"hu:p:s:r:b:n:t:e:",["username=","password=","serport=","parity=",
+                                                         "baudrate=","numbits=","stopbits=","encryption="])
     except getopt.GetoptError:
         print_help()
         sys.exit(2)
@@ -159,6 +163,9 @@ if __name__ == "__main__":
             param_number_of_bits = arg
         elif opt in ("-t", "--stopbits"):
             param_stop_bits = arg
+        elif opt in ("-e", "--encryption"):
+            if arg == '1':
+                param_encryption = True
     # these three parameters must be present for program to work
     if param_cyw_username == '' or param_cyw_password == '' or param_serial_port_name == '':
         print_help()
@@ -173,5 +180,5 @@ if __name__ == "__main__":
     if param_stop_bits != '':
         serial_port.set_stop_bits(param_stop_bits)
     serial_port.open_serial_port()
-    cyw = ControlYourWay(param_cyw_username, param_cyw_password, serial_port)
+    cyw = ControlYourWay(param_cyw_username, param_cyw_password, serial_port, param_encryption)
     print("Program finished")
