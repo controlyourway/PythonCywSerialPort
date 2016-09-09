@@ -1,4 +1,4 @@
-import serial, time, getopt, sys, signal
+import serial, time, sys, signal, ConfigParser
 from threading import Thread
 import ControlYourWay_v1_p27
 
@@ -65,7 +65,7 @@ class SerialPort:
 
 
 class ControlYourWay:
-    def __init__(self, cyw_username, cyw_password, serial_port, encryption, cyw_network_names=['network 1']):
+    def __init__(self, cyw_username, cyw_password, serial_port, encryption, cyw_network_names):
         self._cyw = ControlYourWay_v1_p27.CywInterface()
         self._cyw.set_user_name(cyw_username)
         self._cyw.set_network_password(cyw_password)
@@ -75,6 +75,7 @@ class ControlYourWay:
         self._cyw.name = 'Python Serial Interface'
         if encryption:
             self._cyw.set_use_encryption(True)
+        self._send_data_collected = ""
         self._send_data_collected = ""
         self._cyw.start()
         self._running = True
@@ -117,68 +118,30 @@ class ControlYourWay:
     def data_received(self, c):
         self._send_data_collected += c
 
-def print_help():
-    print('PythonCywSerialPort.py -u <username> -p <password> -s <serialport>\n')
-    print('For example:\n')
-    print('PythonCywSerialPort.py -u test@controlyourway.com -p 123456789 -s "COM1"\n')
-    print('Please register on www.controlyourway.com if you don\'t have these details\n')
-    print('Optional parameters:\n')
-    print('-r <parity> (E for even, O for odd), default None\n')
-    print('-b <baudrate>, default 115200\n')
-    print('-n <number of bits> (7 or 8), default 8\n')
-    print('-t <stop bits> (1 or 2), default 1\n')
-    print('-e <encryption> (0 or 1)default 0\n')
-
 if __name__ == "__main__":
-    param_cyw_username = ''
-    param_cyw_password = ''
-    param_serial_port_name = ''
-    param_parity = ''
-    param_baudrate=''
-    param_number_of_bits = ''
-    param_stop_bits = ''
-    param_encryption = False
-    argv = sys.argv[1:]
-    try:
-        opts, args = getopt.getopt(argv,"hu:p:s:r:b:n:t:e:",["username=","password=","serport=","parity=",
-                                                         "baudrate=","numbits=","stopbits=","encryption="])
-    except getopt.GetoptError:
-        print_help()
-        sys.exit(2)
-    for opt, arg in opts:
-        if opt == '-h':
-            print_help()
-            sys.exit()
-        elif opt in ("-u", "--username"):
-            param_cyw_username = arg
-        elif opt in ("-p", "--password"):
-            param_cyw_password = arg
-        elif opt in ("-s", "--serport"):
-            param_serial_port_name = arg
-        elif opt in ("-r", "--parity"):
-            param_parity = arg
-        elif opt in ("-b", "--baudrate"):
-            param_baudrate = arg
-        elif opt in ("-n", "--numbits"):
-            param_number_of_bits = arg
-        elif opt in ("-t", "--stopbits"):
-            param_stop_bits = arg
-        elif opt in ("-e", "--encryption"):
-            if arg == '1':
-                param_encryption = True
-    # these three parameters must be present for program to work
-    if param_cyw_username == '' or param_cyw_password == '' or param_serial_port_name == '':
-        print_help()
-        sys.exit(2)
+    network_names_option = "network"
+    config = ConfigParser.ConfigParser()
+    config.read("settings.ini")
+    connection_list = config.options("ControlYourWayConnectionDetails")
+    param_cyw_username = config.get("ControlYourWayConnectionDetails", "username")
+    param_cyw_password = config.get("ControlYourWayConnectionDetails", "password")
+    param_cyw_encryption = False
+    if config.get("ControlYourWayConnectionDetails", "encryption") == "1":
+        param_encryption = True
+    param_cyw_network_names = []
+    for item in connection_list:  #search for network names
+        if item[:len(network_names_option)] == network_names_option:
+            param_cyw_network_names.append(config.get("ControlYourWayConnectionDetails", item))
+    param_serial_port_name = config.get("SerialPortSettings", "serport")
+    param_parity = config.get("SerialPortSettings", "parity")
+    param_baudrate = config.get("SerialPortSettings", "baudrate")
+    param_number_of_bits = config.get("SerialPortSettings", "numbits")
+    param_stop_bits = config.get("SerialPortSettings", "stopbits")
     serial_port = SerialPort(param_serial_port_name)
-    if param_parity != '':
-        serial_port.set_parity(param_parity)
-    if param_baudrate != '':
-        serial_port.set_baudrate(param_baudrate)
-    if param_number_of_bits != '':
-        serial_port.set_number_of_bits(param_number_of_bits)
-    if param_stop_bits != '':
-        serial_port.set_stop_bits(param_stop_bits)
+    serial_port.set_parity(param_parity)
+    serial_port.set_baudrate(param_baudrate)
+    serial_port.set_number_of_bits(param_number_of_bits)
+    serial_port.set_stop_bits(param_stop_bits)
     serial_port.open_serial_port()
-    cyw = ControlYourWay(param_cyw_username, param_cyw_password, serial_port, param_encryption)
+    cyw = ControlYourWay(param_cyw_username, param_cyw_password, serial_port, param_cyw_encryption, param_cyw_network_names)
     print("Program finished")
