@@ -67,7 +67,7 @@ class SerialPort:
 
 
 class ControlYourWay:
-    def __init__(self, cyw_username, cyw_password, serial_port, encryption, cyw_network_names):
+    def __init__(self, cyw_username, cyw_password, serial_port, encryption, cyw_network_names, cyw_datatype):
         self._cyw = ControlYourWay_v1_p34.CywInterface()
         self._cyw.set_user_name(cyw_username)
         self._cyw.set_network_password(cyw_password)
@@ -80,6 +80,7 @@ class ControlYourWay:
         self._send_data_collected = ""
         self._cyw.start()
         self._running = True
+        self._datatype = cyw_datatype
         self._thread = Thread(target=self._collect_data)
         self._thread.start()
         self._serial_port = serial_port
@@ -101,6 +102,7 @@ class ControlYourWay:
             if len(self._send_data_collected) > 0:
                 send_data = ControlYourWay_v1_p34.CreateSendData()
                 send_data.data = self._send_data_collected
+                send_data.data_type = self._datatype
                 self._cyw.send_data(send_data)
                 self._send_data_collected = ""
             time.sleep(0.01)
@@ -120,12 +122,18 @@ class ControlYourWay:
         self._send_data_collected += c.decode()
 
 if __name__ == "__main__":
+    # see if the user specified a settings file
+    if len(sys.argv) == 2:
+        settings_filename = sys.argv[1]
+    else:
+        settings_filename = "settings.ini"
     network_names_option = "network"
     config = configparser.ConfigParser()
-    config.read("settings.ini")
+    config.read(settings_filename)
     connection_list = config.options("ControlYourWayConnectionDetails")
     param_cyw_username = config.get("ControlYourWayConnectionDetails", "username")
     param_cyw_password = config.get("ControlYourWayConnectionDetails", "password")
+    param_cyw_datatype = config.get("ControlYourWayConnectionDetails", "datatype")
     param_cyw_encryption = False
     if config.get("ControlYourWayConnectionDetails", "encryption") == "1":
         param_encryption = True
@@ -144,5 +152,6 @@ if __name__ == "__main__":
     serial_port.set_number_of_bits(param_number_of_bits)
     serial_port.set_stop_bits(param_stop_bits)
     serial_port.open_serial_port()
-    cyw = ControlYourWay(param_cyw_username, param_cyw_password, serial_port, param_cyw_encryption, param_cyw_network_names)
+    cyw = ControlYourWay(param_cyw_username, param_cyw_password, serial_port, param_cyw_encryption,
+                         param_cyw_network_names, param_cyw_datatype)
     print("Program finished")
