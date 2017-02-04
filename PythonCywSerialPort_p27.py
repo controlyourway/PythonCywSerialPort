@@ -65,7 +65,8 @@ class SerialPort:
 
 
 class ControlYourWay:
-    def __init__(self, cyw_username, cyw_password, serial_port, encryption, cyw_network_names, cyw_datatype):
+    def __init__(self, cyw_username, cyw_password, serial_port, encryption, use_websocket, \
+                 cyw_network_names, cyw_datatype):
         self._cyw = ControlYourWay_v1_p27.CywInterface()
         self._cyw.set_user_name(cyw_username)
         self._cyw.set_network_password(cyw_password)
@@ -75,6 +76,8 @@ class ControlYourWay:
         self._cyw.name = 'Python Serial Interface'
         if encryption:
             self._cyw.set_use_encryption(True)
+        if not use_websocket:
+            self._cyw.set_use_websocket(False)
         self._send_data_collected = ""
         self._cyw.start()
         self._running = True
@@ -135,6 +138,9 @@ if __name__ == "__main__":
     param_cyw_encryption = False
     if config.get("ControlYourWayConnectionDetails", "encryption") == "1":
         param_encryption = True
+    param_cyw_use_websocket = True
+    if config.get("ControlYourWayConnectionDetails", "encryption") == "0":
+        param_cyw_use_websocket = False
     param_cyw_network_names = []
     for item in connection_list:  #search for network names
         if item[:len(network_names_option)] == network_names_option:
@@ -151,5 +157,5 @@ if __name__ == "__main__":
     serial_port.set_stop_bits(param_stop_bits)
     serial_port.open_serial_port()
     cyw = ControlYourWay(param_cyw_username, param_cyw_password, serial_port, param_cyw_encryption,
-                         param_cyw_network_names, param_cyw_datatype)
+                         param_cyw_use_websocket, param_cyw_network_names, param_cyw_datatype)
     print("Program finished")
