@@ -92,7 +92,7 @@ class CywConstants:
         self.websocket_keep_alive_sent_timeout = 10
 
         self.use_test_server = False
-        self.test_server_name = 'localhost:6972'
+        self.test_server_name = 'localhost:60061'
         self.thread_sleep_time = 0.1  # seconds
 
 
@@ -596,8 +596,12 @@ class CywInterface:
                         m.wait_before_retry = self.get_epoch_time() + 5
                         m.waiting_for_response = True
                         send_packet = CywNewInstance()
-                        send_packet.url = 'www.controlyourway.com'
-                        send_packet.url_ssl = 'www.controlyourway.com'
+                        if l.constants.use_test_server:
+                            send_packet.url = l.constants.test_server_name
+                            send_packet.url_ssl = l.constants.test_server_name
+                        else:
+                            send_packet.url = 'www.controlyourway.com'
+                            send_packet.url_ssl = 'www.controlyourway.com'
                         send_packet.page = '/GetCredentials'
                         cyw_dict = CreateCywDictionary()
                         cyw_dict.keys.append('p')   # protocol number
@@ -736,6 +740,11 @@ class CywInterface:
                             if l.enable_debug_messages and l.debug_messages_callback is not None:
                                 l.debug_messages_callback('WebSocket authentication failed, error code: ' + ws_error_code)
                             l.cyw_state = l.constants.state_request_credentials
+                            l.websocket_state = l.constants.ws_state_not_connected
+                            try:
+                                l.websocket.close()
+                            except:
+                                pass
                         m.waiting_for_response = False
                         self.set_new_websocket_keep_alive_timeout(l.constants.websocket_keep_alive_timeout)
                         l.keep_alive_sent = False
@@ -883,8 +892,12 @@ class CywInterface:
                             l.device_id = CywInterface.get_cyw_dictionary_single_value(cyw_dict, 'id')
                             urls = CywInterface.get_cyw_dictionary_values(cyw_dict, 'ip')
                             if len(urls) == 2:
-                                ip_ok = self.test_ip_address(urls[0])
-                                ip_ok2 = self.test_ip_address(urls[1])
+                                if l.constants.use_test_server:
+                                    ip_ok = True
+                                    ip_ok2 = True
+                                else:
+                                    ip_ok = self.test_ip_address(urls[0])
+                                    ip_ok2 = self.test_ip_address(urls[1])
                                 if ip_ok and ip_ok2:
                                     l.server_ip_addr = urls[0]
                                     l.server_ip_addr2 = urls[1]
@@ -1456,6 +1469,10 @@ class CywInterface:
         l = self.__locals
         if l.enable_debug_messages and l.debug_messages_callback is not None:
             l.debug_messages_callback('Error in WebSocket connection')
+        #restart connection on websocket error
+        l.websocket_state = l.constants.ws_state_not_connected
+        l.websocket.close()
+        l.cyw_state = l.constants.state_request_credentials
 
     def websocket_onmessage(self, ws, message):
         l = self.__locals
@@ -1470,7 +1487,7 @@ class CywInterface:
         l = self.__locals
         l.websocket_thread_running = True
         l.websocket_thread_terminated = False
-        while l.master_thread_running:
+        while l.websocket_thread_running:
             if not l.use_websocket:
                 time.sleep(0.2)  # this thread must not do anything when long polling is used
             else:
