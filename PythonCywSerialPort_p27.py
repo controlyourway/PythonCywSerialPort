@@ -147,7 +147,7 @@ if __name__ == "__main__":
     if config.get("ControlYourWayConnectionDetails", "encryption") == "1":
         param_encryption = True
     param_cyw_use_websocket = True
-    if config.get("ControlYourWayConnectionDetails", "encryption") == "0":
+    if config.get("ControlYourWayConnectionDetails", "useWebsocket") == "0":
         param_cyw_use_websocket = False
     param_cyw_debug_output = True
     if config.get("ControlYourWayConnectionDetails", "debugOutput") == "0":
