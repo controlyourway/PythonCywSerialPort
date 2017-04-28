@@ -79,6 +79,9 @@ class ControlYourWay:
             self._cyw.set_use_encryption(True)
         if not use_websocket:
             self._cyw.set_use_websocket(False)
+            print("Connection type: Long polling")
+        else:
+            print("Connection type: WebSocket")
         self._send_data_collected = ""
         self._cyw.start()
         self._running = True
