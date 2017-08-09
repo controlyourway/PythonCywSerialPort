@@ -1,6 +1,8 @@
 import serial, time, sys, signal, ConfigParser
 from threading import Thread
-import ControlYourWay_v1_p27
+import ControlYourWay_p27
+import logging
+import os
 
 
 class SerialPort:
@@ -66,15 +68,17 @@ class SerialPort:
 
 class ControlYourWay:
     def __init__(self, cyw_username, cyw_password, serial_port, encryption, use_websocket, \
-                 cyw_network_names, cyw_datatype, debug_output):
-        self.debug_output = debug_output
-        self._cyw = ControlYourWay_v1_p27.CywInterface()
+                 cyw_network_names, cyw_datatype, log_directory):
+        self._log_directory = log_directory
+        self._cyw = ControlYourWay_p27.CywInterface()
         self._cyw.set_user_name(cyw_username)
         self._cyw.set_network_password(cyw_password)
         self._cyw.set_network_names(cyw_network_names)
         self._cyw.set_connection_status_callback(self.connection_status_callback)
         self._cyw.set_data_received_callback(self.data_received_callback)
-        self._cyw.name = 'Python Serial Interface'
+        if self._log_directory != '':
+            self._cyw.enable_logging(self._log_directory, logging.DEBUG, True)
+        self._cyw.name = 'Python Serial Port'
         if encryption:
             self._cyw.set_use_encryption(True)
         if not use_websocket:
@@ -105,7 +109,7 @@ class ControlYourWay:
     def _collect_data(self):
         while self._running:
             if len(self._send_data_collected) > 0:
-                send_data = ControlYourWay_v1_p27.CreateSendData()
+                send_data = ControlYourWay_p27.CreateSendData()
                 send_data.data = self._send_data_collected
                 send_data.data_type = self._datatype
                 self._cyw.send_data(send_data)
@@ -121,14 +125,12 @@ class ControlYourWay:
 
     def data_received_callback(self, data, data_type, from_who):
         self._serial_port.send_data(data)
-        if self.debug_output:
-            print(data)
+        #print(data)
 
     # callback which will be called by serial port when data is received
     def data_received(self, c):
         self._send_data_collected += c
-        if self.debug_output:
-            print(c)
+        #print(c)
 
 if __name__ == "__main__":
     # see if the user specified a settings file
@@ -136,6 +138,9 @@ if __name__ == "__main__":
         settings_filename = sys.argv[1]
     else:
         settings_filename = "settings.ini"
+    if not os.path.isfile(settings_filename):
+        print('Error: Could not load settings file: ' + settings_filename)
+        sys.exit()
     network_names_option = "network"
     config = ConfigParser.ConfigParser()
     config.read(settings_filename)
@@ -149,9 +154,7 @@ if __name__ == "__main__":
     param_cyw_use_websocket = True
     if config.get("ControlYourWayConnectionDetails", "useWebsocket") == "0":
         param_cyw_use_websocket = False
-    param_cyw_debug_output = True
-    if config.get("ControlYourWayConnectionDetails", "debugOutput") == "0":
-        param_cyw_debug_output = False
+    param_cyw_log_directory = config.get("ControlYourWayConnectionDetails", "logDirectory")
     param_cyw_network_names = []
     for item in connection_list:  #search for network names
         if item[:len(network_names_option)] == network_names_option:
@@ -168,5 +171,5 @@ if __name__ == "__main__":
     serial_port.set_stop_bits(param_stop_bits)
     serial_port.open_serial_port()
     cyw = ControlYourWay(param_cyw_username, param_cyw_password, serial_port, param_cyw_encryption,
-                         param_cyw_use_websocket, param_cyw_network_names, param_cyw_datatype, param_cyw_debug_output)
+                         param_cyw_use_websocket, param_cyw_network_names, param_cyw_datatype, param_cyw_log_directory)
     print("Program finished")
