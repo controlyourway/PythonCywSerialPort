@@ -2,3 +2,4 @@
 .idea/
 test.ini
 release.txt
+*.log
