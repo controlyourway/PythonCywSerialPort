@@ -125,12 +125,10 @@ class ControlYourWay:
 
     def data_received_callback(self, data, data_type, from_who):
         self._serial_port.send_data(data)
-        #print(data)
 
     # callback which will be called by serial port when data is received
     def data_received(self, c):
         self._send_data_collected += c
-        #print(c)
 
 if __name__ == "__main__":
     # see if the user specified a settings file
