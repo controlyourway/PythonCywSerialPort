@@ -85,10 +85,9 @@ numbits: 8
 stopbits: 1
 EOM
 
-echo -n "The settings are stored at /etc/cywserialport.ini if you need to make any changes."
-echo -n "If you changed this file, restart the service by entering: sudo service cywserialport restart"
-echo -n ""
-echo -n ""
+printf "\n\nThe settings are stored at /etc/cywserialport.ini if you need to make any changes."
+printf "\nIf you changed this file, restart the service by entering: sudo service cywserialport restart"
+printf "\n\n\n"
 
 # create auto-start script
 cat > /lib/systemd/system/cywserialport.service <<- EOM
