@@ -77,7 +77,7 @@ class ControlYourWay:
         self._cyw.set_connection_status_callback(self.connection_status_callback)
         self._cyw.set_data_received_callback(self.data_received_callback)
         if self._log_directory != '':
-            self._cyw.enable_logging(self._log_directory, logging.DEBUG, True)
+            self._cyw.enable_logging(self._log_directory+'log.txt', logging.DEBUG, True)
         self._cyw.name = 'Python Serial Port'
         if encryption:
             self._cyw.set_use_encryption(True)
