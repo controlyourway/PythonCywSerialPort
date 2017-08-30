@@ -159,6 +159,7 @@ class CywLocals:
         self.networks_updated = False
         self.discoverable = True
         self.headers = {'Content-type': 'application/octet-stream'}
+        self.log_level = logging.ERROR
 
         # counters
         self.counters = CywCounters()
@@ -263,6 +264,7 @@ class CywInterface:
         """
         # Add a file handler
         l = self.__locals
+        l.log_level = log_level
         for h in list(l.logger.handlers):
             l.logger.removeHandler(h)
         if log_filename != "":
@@ -571,6 +573,24 @@ class CywInterface:
                     the_same = False
         return the_same
 
+    @staticmethod
+    def bracket_encode(data):
+        """Build a string where all visible ASCII characters will be shown normally and non visible ASCII
+        characters will be shown between square brackets. An opening square bracket will be [[
+        :param d: The data that must be bracket encoded
+        :return:
+        """
+        text = ""
+        for i in range(0, len(data)):
+            val = ord(data[i])
+            if val < 32 or val > 126:
+                text += '[' + str(val) + ']'
+            elif data[i] == '[':
+                text += '[['
+            else:
+                text += data[i]
+        return text
+
     def master_thread(self, m):
         """This function must never be called directly by user. Call Start() to start the service
         :param m: variables used by master thread
@@ -707,12 +727,19 @@ class CywInterface:
                         m.retry_count = 0
                         if l.use_websocket:
                             to_cloud_packet.post_data += l.constants.terminating_string
+                        else:
+                            # add counter
+                            to_cloud_packet.post_data += '~z=' + str(l.counters.upload)
+                        if l.log_level == logging.DEBUG:
+                            # log detailed data about the data that was sent
+                            log_str = "Data sent: " \
+                                      + CywInterface.bracket_encode(to_cloud_packet.post_data)
+                            l.logger.debug(log_str)
+                        if l.use_websocket:
                             l.websocket.send(to_cloud_packet.post_data)
                             self.set_new_websocket_keep_alive_timeout(l.constants.websocket_keep_alive_timeout)
                             l.logger.debug('WebSocket: Sending packet')
                         else:
-                            # add counter
-                            to_cloud_packet.post_data += '~z=' + str(l.counters.upload)
                             l.to_cloud_queue.put(to_cloud_packet)
                             l.logger.debug('Long Polling: Sending packet')
                         l.counters.upload += 1
@@ -921,8 +948,6 @@ class CywInterface:
                                 else:
                                     l.logger.debug('Error parsing server IP address')
                         elif error_code == '8':  # invalid username or network password
-                            if l.error_callback is not None:
-                                l.error_callback(error_code)
                             # stop service
                             l.closing_threads = True
                             l.cyw_state = l.constants.state_request_credentials
@@ -935,7 +960,7 @@ class CywInterface:
                                 l.connection_status_callback(False)
                             if l.error_callback is not None:
                                 l.error_callback(error_code)
-                            l.logger.debug('Invalid user credentials')
+                            l.logger.error('Invalid user credentials')
                         elif error_code == '20':  # connection problem
                             if l.error_callback is not None:
                                 l.error_callback(error_code)
@@ -1482,6 +1507,11 @@ class CywInterface:
         data = ''
         for b in message:
             data += chr(b)
+        if l.log_level == logging.DEBUG:
+            # log detailed data about the data that was received
+            log_str = "WebSocket onmessage event, data received: " \
+                      + CywInterface.bracket_encode(data)
+            l.logger.debug(log_str)
         l.websocket_rec_data_buf += data
         while self.process_websocket_rec_data():
             pass
