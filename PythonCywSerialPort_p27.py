@@ -3,13 +3,13 @@ from threading import Thread
 import ControlYourWay_p27
 import logging
 import os
+import Queue
 
 
 class SerialPort:
     def __init__(self, port):
         # configure serial port
         self._rx_callback = None
-        self._buffer = ""
         self._parity = serial.PARITY_NONE
         self._baudrate=115200
         self._number_of_bits = serial.EIGHTBITS
@@ -76,6 +76,7 @@ class ControlYourWay:
         self._cyw.set_network_names(cyw_network_names)
         self._cyw.set_connection_status_callback(self.connection_status_callback)
         self._cyw.set_data_received_callback(self.data_received_callback)
+        self._serial_port_rec_queue = Queue.Queue()
         if self._log_directory != '':
             self._cyw.enable_logging(self._log_directory+'log.txt', logging.DEBUG, True)
         self._cyw.name = 'Python Serial Port'
@@ -86,7 +87,6 @@ class ControlYourWay:
             print("Connection type: Long polling")
         else:
             print("Connection type: WebSocket")
-        self._send_data_collected = ""
         self._cyw.start()
         self._running = True
         self._datatype = cyw_datatype
@@ -108,12 +108,14 @@ class ControlYourWay:
 
     def _collect_data(self):
         while self._running:
-            if len(self._send_data_collected) > 0:
+            if not self._serial_port_rec_queue.empty():
+                build_str = ""
+                while not self._serial_port_rec_queue.empty():
+                    build_str += self._serial_port_rec_queue.get()
                 send_data = ControlYourWay_p27.CreateSendData()
-                send_data.data = self._send_data_collected
+                send_data.data = build_str
                 send_data.data_type = self._datatype
                 self._cyw.send_data(send_data)
-                self._send_data_collected = ""
             time.sleep(0.01)
         return False
 
@@ -128,7 +130,7 @@ class ControlYourWay:
 
     # callback which will be called by serial port when data is received
     def data_received(self, c):
-        self._send_data_collected += c
+        self._serial_port_rec_queue.put(c)
 
 if __name__ == "__main__":
     # see if the user specified a settings file

@@ -3,3 +3,5 @@
 test.ini
 release.txt
 *.log
+testRPi.ini
+log.txt*
