@@ -920,6 +920,7 @@ class CywInterface:
                         l.websocket_state = l.constants.ws_state_not_connected
                         l.websocket.close()
                         l.logger.debug('WebSocket: Timeout, restarting connection')
+                        m.waiting_for_response = False
             # //////////////////////////////////////////////////////////////////////////////////////////////
             # see if response from toCloud thread
             if not l.from_to_cloud_to_master_queue.empty():
@@ -1322,9 +1323,13 @@ class CywInterface:
             l.download_thread_running = False
             if l.cyw_state == l.constants.state_running:
                 if l.use_websocket:
-                    l.websocket.send('~c=t' + l.constants.terminating_string)  # send websocket termination message
-                    l.websocket_state = l.constants.ws_state_closing_connection
-                    l.logger.debug('WebSocket: Close connection message sent')
+                    try:
+                        l.websocket.send('~c=t' + l.constants.terminating_string)  # send websocket termination message
+                        l.websocket_state = l.constants.ws_state_closing_connection
+                        l.logger.debug('WebSocket: Close connection message sent')
+                    except Exception, e:
+                        l.logger.error('Error closing WebSocket connection: ' + str(e))
+                        l.websocket_state = l.constants.ws_state_not_connected
                 else:
                     self.send_cancel_request(True)
                     l.logger.debug('Long polling: Close connection message sent')
