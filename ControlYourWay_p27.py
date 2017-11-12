@@ -90,9 +90,11 @@ class CywConstants:
         self.ws_state_closing_connection = 6
         self.ws_state_restart_connection = 7
         self.ws_state_waiting_for_connection = 8
+        self.ws_state_connection_timeout = 9
         self.terminating_string = "~t=1"
         self.websocket_keep_alive_timeout = 30
         self.websocket_keep_alive_sent_timeout = 10
+        self.websocket_thread_dead_timeout = 10
 
         self.use_test_server = False
         self.test_server_name = 'localhost:60061'
@@ -925,10 +927,17 @@ class CywInterface:
                         l.logger.debug('WebSocket: Keep alive message sent')
                     else:
                         # websocket response timed out, connection is dead. Create new connection
-                        l.websocket_state = l.constants.ws_state_not_connected
+                        l.websocket_state = l.constants.ws_state_connection_timeout
                         l.websocket.close()
                         l.logger.debug('WebSocket: Timeout, restarting connection')
                         m.waiting_for_response = False
+                        self.set_new_websocket_keep_alive_timeout(l.constants.websocket_thread_dead_timeout)
+                if (l.websocket_state == l.constants.ws_state_connection_timeout) and \
+                    (self.check_if_websocket_keep_alive_expired()):
+                    l.logger.debug('WebSocket: WebScoket thread hanged up, create new websocket thread')
+                    l.websocket_state = l.constants.ws_state_not_connected
+                    l.websocket_thread = threading.Thread(target=self.websocket_thread)
+                    l.websocket_thread.start()
             # //////////////////////////////////////////////////////////////////////////////////////////////
             # see if response from toCloud thread
             if not l.from_to_cloud_to_master_queue.empty():
