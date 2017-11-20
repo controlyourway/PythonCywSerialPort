@@ -1031,6 +1031,8 @@ class CywInterface:
                                     l.logger.debug('Got credentials from server')
                                     if l.connection_status_callback is not None:
                                         l.connection_status_callback(True)
+                                    if self.websocket_state != self.constants.ws_state_not_connected:
+                                        self.close_websocket()
                                 else:
                                     l.logger.debug('Error parsing server IP address')
                         elif error_code == '8':  # invalid username or network password
