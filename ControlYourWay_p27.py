@@ -1580,7 +1580,7 @@ class CywInterface:
         l = self.__locals
         l.logger.debug('WebSocket onopen event')
         l.websocket_state = l.constants.ws_state_connected_not_auth
-        self.check_if_websocket_keep_alive_expired(l.constants.websocket_thread_dead_timeout)
+        self.set_new_websocket_keep_alive_timeout(l.constants.websocket_thread_dead_timeout)
 
     def websocket_onclose(self, ws):
         l = self.__locals
@@ -1606,7 +1606,7 @@ class CywInterface:
         l.websocket_rec_data_buf += message
         while self.process_websocket_rec_data():
             pass
-        self.check_if_websocket_keep_alive_expired(l.constants.websocket_thread_dead_timeout)
+        self.set_new_websocket_keep_alive_timeout(l.constants.websocket_thread_dead_timeout)
 
     def websocket_thread(self):
         """This function must never be called directly by user. Call Start() to start the service
@@ -1617,7 +1617,7 @@ class CywInterface:
         l.websocket_thread_running.append(True)
         l.logger.info('WebSocket thread started: ', str(my_index))
         while l.websocket_thread_running[my_index]:
-            self.check_if_websocket_keep_alive_expired(l.constants.websocket_thread_dead_timeout)
+            self.set_new_websocket_keep_alive_timeout(l.constants.websocket_thread_dead_timeout)
             if not l.use_websocket:
                 time.sleep(0.2)  # this thread must not do anything when long polling is used
             else:
