@@ -88,13 +88,13 @@ class CywConstants:
         self.ws_state_set_listen_to_networks_sent = 4
         self.ws_state_running = 5
         self.ws_state_closing_connection = 6
-        self.ws_state_restart_connection = 7
-        self.ws_state_waiting_for_connection = 8
+        self.ws_state_restart_connection = 7  #used when use encryption changes
+        self.ws_state_wait_for_connection_retry = 8
         self.ws_state_connection_timeout = 9
         self.terminating_string = "~t=1"
         self.websocket_keep_alive_timeout = 30
         self.websocket_keep_alive_sent_timeout = 10
-        self.websocket_thread_dead_timeout = 10
+        self.websocket_thread_dead_timeout = 60
 
         self.use_test_server = False
         self.test_server_name = 'localhost:60061'
@@ -206,21 +206,18 @@ class CywLocals:
         # threads
         self.master_thread = None
         self.master_thread_running = False
-        self.master_thread_terminated = True
         self.upload_thread = None
         self.upload_thread_running = False
-        self.upload_thread_terminated = True
         self.download_thread = None
         self.download_thread_running = False
-        self.download_thread_terminated = True
         self.download_thread_request = False  # set to true when service is running
         self.websocket_thread = None
-        self.websocket_thread_running = False
-        self.websocket_thread_terminated = True
+        self.websocket_thread_running = []
 
         # WebSocket
         self.websocket_state = self.constants.ws_state_not_connected
         self.tick_websocket_keep_alive = calendar.timegm(time.gmtime())
+        self.tick_websocket_dead = calendar.timegm(time.gmtime())
         self.keep_alive_sent = False
         self.websocket_rec_data_buf = ''
         self.websocket_receive_queue = Queue.Queue()
@@ -649,6 +646,16 @@ class CywInterface:
         except:
             l.logger.debug('WebSocket: error closing websocket connection')
 
+    def close_websocket_thread(self):
+        """Will set all the values in the websocket running array to false so that all websocket threads must close.
+        Only one should be active but have seen that they can hang up
+        :return:
+        """
+        l = self.__locals
+        if len(l.websocket_thread_running) > 0:
+            for i in range(len(l.websocket_thread_running)):
+                l.websocket_thread_running[i] = False
+
     def master_thread(self, m):
         """This function must never be called directly by user. Call Start() to start the service
         :param m: variables used by master thread
@@ -656,7 +663,6 @@ class CywInterface:
         """
         l = self.__locals
         l.master_thread_running = True
-        l.master_thread_terminated = False
         l.logger.info('Master thread started')
         while l.master_thread_running:
             something_happened = False
@@ -914,7 +920,7 @@ class CywInterface:
                     elif response_type_value == 'k':
                         self.set_new_websocket_keep_alive_timeout(l.constants.websocket_keep_alive_timeout)
                         l.keep_alive_sent = False
-                        l.logger.debug('WebSocket: Keep alive message acknowledged')
+                        #l.logger.debug('WebSocket: Keep alive message acknowledged')
                     elif response_type_value == 'c':
                         if ws_error_code == '0':
                             if l.websocket_state == l.constants.ws_state_restart_connection:
@@ -936,7 +942,7 @@ class CywInterface:
                                 l.error_callback(ws_error_code)
             if l.use_websocket:
                 if (m.wait_before_retry < self.get_epoch_time()) and \
-                        (l.websocket_state == l.constants.ws_state_waiting_for_connection):
+                        (l.websocket_state == l.constants.ws_state_wait_for_connection_retry):
                     # connection has timed out, try again
                     something_happened = True
                     l.websocket_state = l.constants.ws_state_not_connected
@@ -962,7 +968,7 @@ class CywInterface:
                             l.websocket.send(l.constants.terminating_string)
                             self.set_new_websocket_keep_alive_timeout(l.constants.websocket_keep_alive_sent_timeout)
                             l.keep_alive_sent = True
-                            l.logger.debug('WebSocket: Keep alive message sent')
+                            #l.logger.debug('WebSocket: Keep alive message sent')
                         except:
                             l.logger.debug('WebSocket: Error sending keep alive')
                             self.close_websocket()
@@ -970,10 +976,13 @@ class CywInterface:
                         # websocket response timed out, connection is dead. Create new connection
                         self.close_websocket()
                         l.logger.debug('WebSocket: Timeout, restarting connection')
-
+                if l.cyw_state == l.constants.state_running and self.check_if_websocket_dead_expired():
+                    #websocket dead timeout expired, close websocket thread and restart
+                    l.logger.debug('WebSocket dead timeout expired')
+                    self.close_websocket()
                 if (l.websocket_state == l.constants.ws_state_connection_timeout) and \
                     (self.check_if_websocket_keep_alive_expired()):
-                    l.logger.debug('WebSocket: WebScoket thread hanged up, create new websocket thread')
+                    l.logger.debug('WebSocket: WebSocket thread hanged up, create new websocket thread')
                     l.websocket_state = l.constants.ws_state_not_connected
                     l.websocket_thread = threading.Thread(target=self.websocket_thread)
                     l.websocket_thread.start()
@@ -1031,8 +1040,8 @@ class CywInterface:
                                     l.logger.debug('Got credentials from server')
                                     if l.connection_status_callback is not None:
                                         l.connection_status_callback(True)
-                                    if l.websocket_state != l.constants.ws_state_not_connected:
-                                        self.close_websocket()
+                                    #if l.websocket_state != l.constants.ws_state_not_connected:
+                                    #    self.close_websocket()
                                 else:
                                     l.logger.debug('Error parsing server IP address')
                         elif error_code == '8':  # invalid username or network password
@@ -1043,7 +1052,7 @@ class CywInterface:
                             l.download_thread_running = False
                             l.upload_thread_running = False
                             l.master_thread_running = False
-                            l.websocket_thread_running = False
+                            self.close_websocket_thread()
                             if l.connection_status_callback is not None:
                                 l.connection_status_callback(False)
                             if l.error_callback is not None:
@@ -1138,7 +1147,6 @@ class CywInterface:
 
             if not something_happened:
                 time.sleep(l.constants.thread_sleep_time)
-        l.master_thread_terminated = True
         l.logger.debug('Master thread terminated')
 
     def upload_thread(self):
@@ -1147,7 +1155,6 @@ class CywInterface:
         """
         l = self.__locals
         l.upload_thread_running = True
-        l.upload_thread_terminated = False
         l.logger.debug('Upload thread started')
         while l.upload_thread_running:
             if not l.to_cloud_queue.empty():
@@ -1176,7 +1183,6 @@ class CywInterface:
                 l.from_to_cloud_to_master_queue.put(upload_response)
             else:
                 time.sleep(self.__locals.constants.thread_sleep_time)
-        l.upload_thread_terminated = True
         l.logger.debug('Upload thread terminated')
 
     def download_thread(self):
@@ -1185,7 +1191,6 @@ class CywInterface:
         """
         l = self.__locals
         l.download_thread_running = True
-        l.download_thread_terminated = False
         l.restart_download = False
         l.last_download_successful = False
         download_started_time = self.get_epoch_time()
@@ -1325,7 +1330,6 @@ class CywInterface:
                     time.sleep(5)
                 else:
                     time.sleep(0.1)
-        l.download_thread_terminated = True
         l.logger.debug('Download thread terminated')
 
     def build_urls(self):
@@ -1394,7 +1398,7 @@ class CywInterface:
             l.download_thread.join()
             l.upload_thread_running = False
             l.upload_thread.join()
-            l.websocket_thread_running = False
+            self.close_websocket_thread()
             l.websocket_thread.join()
             l.master_thread_running = False
             l.master_thread.join()
@@ -1564,15 +1568,24 @@ class CywInterface:
             return True  # expired
         return False
 
+    def set_new_websocket_dead_timeout(self, seconds_from_now):
+        self.tick_websocket_dead = self.get_epoch_time() + seconds_from_now
+
+    def check_if_websocket_dead_expired(self):
+        if self.tick_websocket_dead < self.get_epoch_time():
+            return True  # expired
+        return False
+
     def websocket_onopen(self, ws):
         l = self.__locals
         l.logger.debug('WebSocket onopen event')
         l.websocket_state = l.constants.ws_state_connected_not_auth
+        self.check_if_websocket_keep_alive_expired(l.constants.websocket_thread_dead_timeout)
 
     def websocket_onclose(self, ws):
         l = self.__locals
         l.logger.debug('WebSocket onclose event')
-        if l.websocket_state != l.constants.ws_state_waiting_for_connection:  # connection has already been restarted
+        if l.websocket_state != l.constants.ws_state_wait_for_connection_retry:  # connection has already been restarted
             l.websocket_state = l.constants.ws_state_not_connected
 
     def websocket_onerror(self, ws, error):
@@ -1593,16 +1606,18 @@ class CywInterface:
         l.websocket_rec_data_buf += message
         while self.process_websocket_rec_data():
             pass
+        self.check_if_websocket_keep_alive_expired(l.constants.websocket_thread_dead_timeout)
 
     def websocket_thread(self):
         """This function must never be called directly by user. Call Start() to start the service
         :return:
         """
         l = self.__locals
-        l.websocket_thread_running = True
-        l.websocket_thread_terminated = False
-        l.logger.info('WebSocket thread started')
-        while l.websocket_thread_running:
+        my_index = len(l.websocket_thread_running)
+        l.websocket_thread_running.append(True)
+        l.logger.info('WebSocket thread started: ', str(my_index))
+        while l.websocket_thread_running[my_index]:
+            self.check_if_websocket_keep_alive_expired(l.constants.websocket_thread_dead_timeout)
             if not l.use_websocket:
                 time.sleep(0.2)  # this thread must not do anything when long polling is used
             else:
@@ -1610,7 +1625,7 @@ class CywInterface:
                     if l.websocket_state == l.constants.ws_state_not_connected:
                         try:
                             # websocket.enableTrace(True)
-                            l.logger.debug('Create WebSocket connection')
+                            l.logger.debug('Create WebSocket connection: ', str(my_index))
                             if l.use_encryption:
                                 connect_str = l.websocket_ssl_url
                             else:
@@ -1621,14 +1636,14 @@ class CywInterface:
                                             on_close = self.websocket_onclose)
                             l.websocket.on_open = self.websocket_onopen
                             l.websocket.run_forever()
-                            l.logger.debug('WebSocket connection returned')
-                            l.websocket_state = l.constants.ws_state_waiting_for_connection
+                            l.logger.debug('WebSocket connection returned: ', str(my_index))
+                            l.master.wait_before_retry = self.get_epoch_time() + l.constants.wait_before_retry_timeout
+                            l.websocket_state = l.constants.ws_state_wait_for_connection_retry
                         except:
-                            l.logger.debug('Error opening WebSocket connection')
+                            l.logger.debug('Error opening WebSocket connection: ', str(my_index))
                             time.sleep(1)
             time.sleep(0.1)
-        l.websocket_thread_terminated = True
-        l.logger.debug('WebSocket thread terminated')
+        l.logger.debug('WebSocket thread terminated: ', str(my_index))
 
     def process_websocket_rec_data(self):
         l = self.__locals
