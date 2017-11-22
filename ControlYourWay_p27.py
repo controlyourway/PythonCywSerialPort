@@ -976,7 +976,8 @@ class CywInterface:
                         # websocket response timed out, connection is dead. Create new connection
                         self.close_websocket()
                         l.logger.debug('WebSocket: Timeout, restarting connection')
-                if l.cyw_state == l.constants.state_running and self.check_if_websocket_dead_expired():
+                if l.cyw_state == l.constants.state_running and self.check_if_websocket_dead_expired() and \
+                    l.websocket_state != l.constants.ws_state_connection_timeout:
                     #websocket dead timeout expired, close websocket thread and restart
                     l.logger.debug('WebSocket dead timeout expired')
                     self.close_websocket()
@@ -1034,6 +1035,7 @@ class CywInterface:
                                             l.error_codes.keys.append(cyw_dict.keys[ie])
                                             l.error_codes.values.append((cyw_dict.values[ie]))
                                     l.cyw_state = l.constants.state_running
+                                    self.set_new_websocket_dead_timeout(l.constants.websocket_thread_dead_timeout)
                                     self.build_urls()
                                     l.download_thread_request = True  # download thread can start requesting
                                     self.connected = True
@@ -1561,18 +1563,18 @@ class CywInterface:
         return self.__locals.to_master_for_cloud_queue.get_size()
 
     def set_new_websocket_keep_alive_timeout(self, seconds_from_now):
-        self.tick_websocket_keep_alive = self.get_epoch_time() + seconds_from_now
+        self.__locals.tick_websocket_keep_alive = self.get_epoch_time() + seconds_from_now
 
     def check_if_websocket_keep_alive_expired(self):
-        if self.tick_websocket_keep_alive < self.get_epoch_time():
+        if self.__locals.tick_websocket_keep_alive < self.get_epoch_time():
             return True  # expired
         return False
 
     def set_new_websocket_dead_timeout(self, seconds_from_now):
-        self.tick_websocket_dead = self.get_epoch_time() + seconds_from_now
+        self.__locals.tick_websocket_dead = self.get_epoch_time() + seconds_from_now
 
     def check_if_websocket_dead_expired(self):
-        if self.tick_websocket_dead < self.get_epoch_time():
+        if self.__locals.tick_websocket_dead < self.get_epoch_time():
             return True  # expired
         return False
 
@@ -1580,7 +1582,7 @@ class CywInterface:
         l = self.__locals
         l.logger.debug('WebSocket onopen event')
         l.websocket_state = l.constants.ws_state_connected_not_auth
-        self.set_new_websocket_keep_alive_timeout(l.constants.websocket_thread_dead_timeout)
+        self.set_new_websocket_dead_timeout(l.constants.websocket_thread_dead_timeout)
 
     def websocket_onclose(self, ws):
         l = self.__locals
@@ -1606,7 +1608,7 @@ class CywInterface:
         l.websocket_rec_data_buf += message
         while self.process_websocket_rec_data():
             pass
-        self.set_new_websocket_keep_alive_timeout(l.constants.websocket_thread_dead_timeout)
+        self.set_new_websocket_dead_timeout(l.constants.websocket_thread_dead_timeout)
 
     def websocket_thread(self):
         """This function must never be called directly by user. Call Start() to start the service
@@ -1615,9 +1617,9 @@ class CywInterface:
         l = self.__locals
         my_index = len(l.websocket_thread_running)
         l.websocket_thread_running.append(True)
-        l.logger.info('WebSocket thread started: ', str(my_index))
+        l.logger.info('WebSocket thread started: ' + str(my_index))
         while l.websocket_thread_running[my_index]:
-            self.set_new_websocket_keep_alive_timeout(l.constants.websocket_thread_dead_timeout)
+            self.set_new_websocket_dead_timeout(l.constants.websocket_thread_dead_timeout)
             if not l.use_websocket:
                 time.sleep(0.2)  # this thread must not do anything when long polling is used
             else:
@@ -1625,7 +1627,7 @@ class CywInterface:
                     if l.websocket_state == l.constants.ws_state_not_connected:
                         try:
                             # websocket.enableTrace(True)
-                            l.logger.debug('Create WebSocket connection: ', str(my_index))
+                            l.logger.debug('Create WebSocket connection: ' + str(my_index))
                             if l.use_encryption:
                                 connect_str = l.websocket_ssl_url
                             else:
@@ -1636,14 +1638,14 @@ class CywInterface:
                                             on_close = self.websocket_onclose)
                             l.websocket.on_open = self.websocket_onopen
                             l.websocket.run_forever()
-                            l.logger.debug('WebSocket connection returned: ', str(my_index))
+                            l.logger.debug('WebSocket connection returned: ' + str(my_index))
                             l.master.wait_before_retry = self.get_epoch_time() + l.constants.wait_before_retry_timeout
                             l.websocket_state = l.constants.ws_state_wait_for_connection_retry
                         except:
-                            l.logger.debug('Error opening WebSocket connection: ', str(my_index))
+                            l.logger.debug('Error opening WebSocket connection: ' + str(my_index))
                             time.sleep(1)
             time.sleep(0.1)
-        l.logger.debug('WebSocket thread terminated: ', str(my_index))
+        l.logger.debug('WebSocket thread terminated: ' + str(my_index))
 
     def process_websocket_rec_data(self):
         l = self.__locals
